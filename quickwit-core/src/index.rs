@@ -83,20 +83,14 @@ impl IndexService {
         &self,
         index_config: IndexConfig,
     ) -> Result<IndexMetadata, IndexServiceError> {
-        let index_uri = if let Some(index_uri) = index_config.index_uri.as_ref() {
-            index_uri.to_string()
-        } else {
-            let default_index_uri =
-                format!("{}/{}", self.default_index_root_uri, index_config.index_id);
-            info!(
-                "`index-uri` is not specified in the index configuration. Setting it to `{}`.",
-                default_index_uri
-            );
-            default_index_uri
-        };
-
+        let index_id = index_config.index_id.clone();
+        let index_uri = index_config.index_uri().unwrap_or_else(|| {
+            let index_uri = self.default_index_root_uri.join(&index_config.index_id)?;
+            // info!();
+            index_uri
+        });
         let index_metadata = IndexMetadata {
-            index_id: index_config.index_id.clone(),
+            index_id,
             index_uri,
             checkpoint: Default::default(),
             sources: index_config.sources(),
@@ -108,10 +102,7 @@ impl IndexService {
         };
 
         self.metastore.create_index(index_metadata).await?;
-        let index_metadata = self
-            .metastore
-            .index_metadata(&index_config.index_id)
-            .await?;
+        let index_metadata = self.metastore.index_metadata(&index_id).await?;
         Ok(index_metadata)
     }
 
