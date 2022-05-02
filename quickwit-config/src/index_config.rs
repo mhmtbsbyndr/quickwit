@@ -215,7 +215,7 @@ pub struct SearchSettings {
 pub struct IndexConfig {
     pub version: usize,
     pub index_id: String,
-    pub index_uri: Option<String>,
+    index_uri: Option<String>,
     pub doc_mapping: DocMapping,
     #[serde(default)]
     pub indexing_settings: IndexingSettings,
@@ -274,15 +274,26 @@ impl IndexConfig {
             .collect()
     }
 
+    pub fn index_uri(&self) -> Option<Uri> {
+        self.index_uri
+            .as_ref()
+            .map(|uri| Uri::try_new(&uri).unwrap())
+    }
+
     fn validate(&self) -> anyhow::Result<()> {
+        if self.index_id.is_empty() {
+            bail!("Index ID cannot be set to empty string.");
+        }
+        if let Some(index_uri) = self.index_uri.as_ref() {
+            Uri::try_new(index_uri)
+                .with_context(|| format!("Index URI `{}` is not valid.", index_uri))?;
+        }
         if self.sources.len() > self.sources().len() {
             bail!("Index config contains duplicate sources.")
         }
-
         for source in self.sources.iter() {
             source.validate()?;
         }
-
         // Validation is made by building the doc mapper.
         // Note: this needs a deep refactoring to separate the doc mapping configuration,
         // and doc mapper implementations.
@@ -291,7 +302,6 @@ impl IndexConfig {
             &self.search_settings,
             &self.indexing_settings,
         )?;
-
         if self.indexing_settings.merge_policy.max_merge_factor
             < self.indexing_settings.merge_policy.merge_factor
         {
@@ -300,7 +310,6 @@ impl IndexConfig {
                  `merge_factor`."
             )
         }
-
         Ok(())
     }
 }
@@ -528,6 +537,16 @@ mod tests {
         let index_config = IndexConfig::from_uri(&index_config_uri, file_content.as_bytes())
             .await
             .unwrap();
+        {
+            // Set an empty index ID
+            let mut config = index_config.clone();
+            config.index_id = "".to_string();
+            assert!(config
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("Index ID"));
+        }
         {
             let mut invalid_index_config = index_config.clone();
             // Set a max merge factor to an inconsistent value.
