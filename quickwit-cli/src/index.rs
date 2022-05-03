@@ -527,7 +527,7 @@ pub async fn list_index_cli(args: ListIndexesArgs) -> anyhow::Result<()> {
         .metastore_uri
         .unwrap_or_else(|| quickwit_config.metastore_uri());
     let metastore = metastore_uri_resolver
-        .resolve(metastore_uri.as_ref())
+        .resolve(metastore_uri)
         .await?;
     let indexes = metastore.list_indexes_metadatas().await?;
     let index_table = make_list_indexes_table(indexes);

@@ -110,10 +110,6 @@ impl Uri {
         Self { uri, protocol_idx }
     }
 
-    pub fn as_str(&self) -> &str {
-        &self.uri
-    }
-
     /// Returns the extension of the URI.
     pub fn extension(&self) -> Option<Extension> {
         Path::new(&self.uri)
