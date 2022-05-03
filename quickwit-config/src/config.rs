@@ -392,7 +392,7 @@ impl std::fmt::Debug for QuickwitConfig {
 }
 
 /// Deserializes and validates a [`Uri`].
-fn deser_valid_uri<'de, D>(deserializer: D) -> Result<Option<Uri>, D::Error>
+pub(super) fn deser_valid_uri<'de, D>(deserializer: D) -> Result<Option<Uri>, D::Error>
 where D: Deserializer<'de> {
     let uri_opt: Option<String> = Deserialize::deserialize(deserializer)?;
     uri_opt

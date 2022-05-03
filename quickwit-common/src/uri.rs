@@ -103,6 +103,17 @@ impl Uri {
         })
     }
 
+    pub fn new(uri: String) -> Self {
+        let protocol_idx = uri
+            .find(PROTOCOL_SEPARATOR)
+            .expect("URI lacks protocol separator. Use `Uri::new` exclusively for trusted input.");
+        Self { uri, protocol_idx }
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.uri
+    }
+
     /// Returns the extension of the URI.
     pub fn extension(&self) -> Option<Extension> {
         Path::new(&self.uri)
@@ -130,13 +141,36 @@ impl Uri {
     pub fn into_string(self) -> String {
         self.uri
     }
-}
 
-impl AsRef<str> for Uri {
-    fn as_ref(&self) -> &str {
-        &self.uri
+    pub fn join(&self, path: &str) -> anyhow::Result<Self> {
+        if path.starts_with('/') {
+            bail!("");
+        }
+        let joined = match self.protocol() {
+            FILE_PROTOCOL => Path::new(&self.uri)
+                .join(path)
+                .to_string_lossy()
+                .to_string(),
+            "s3" => format!(
+                "{}{}{}",
+                self.uri,
+                if self.uri.ends_with('/') { "" } else { "/" },
+                path
+            ),
+            other => bail!("Protocol `{}` does not support `Uri::join`.", other),
+        };
+        Ok(Self {
+            uri: joined,
+            protocol_idx: self.protocol_idx,
+        })
     }
 }
+
+// impl AsRef<str> for Uri {
+//     fn as_ref(&self) -> &str {
+//         &self.uri
+//     }
+// }
 
 impl Display for Uri {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -209,7 +243,6 @@ mod tests {
         let uri = Uri::try_new("file:///home/foo/bar").unwrap();
         assert_eq!(uri.protocol(), "file");
         assert_eq!(uri.filepath(), Some(Path::new("/home/foo/bar")));
-        assert_eq!(uri.as_ref(), "file:///home/foo/bar");
         assert_eq!(uri, "file:///home/foo/bar");
         assert_eq!(uri, "file:///home/foo/bar".to_string());
 
@@ -253,6 +286,7 @@ mod tests {
             Uri::try_new("file://").unwrap(),
             format!("file://{}", current_dir.display())
         );
+        assert_eq!(Uri::try_new("file:///").unwrap(), "file:///");
         assert_eq!(
             Uri::try_new("file://.").unwrap(),
             format!("file://{}", current_dir.display())
@@ -289,6 +323,25 @@ mod tests {
                 .unwrap(),
             Extension::Unknown("foo".to_string())
         );
+    }
+
+    #[test]
+    fn test_uri_join() {
+        assert_eq!(
+            Uri::new("file:///".to_string()).join("foo").unwrap(),
+            "file:///foo"
+        );
+        assert_eq!(
+            Uri::new("file:///foo".to_string()).join("bar").unwrap(),
+            "file:///foo/bar"
+        );
+        assert_eq!(
+            Uri::new("file:///foo/".to_string()).join("bar").unwrap(),
+            "file:///foo/bar"
+        );
+        Uri::new("postgres://username:password@localhost:5432/metastore".to_string())
+            .join("table")
+            .unwrap_err();
     }
 
     #[test]
