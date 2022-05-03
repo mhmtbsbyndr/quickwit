@@ -115,7 +115,7 @@ impl MetastoreFactory for FileBackedMetastoreFactory {
         debug!("metastore not found in cache");
         let storage = self
             .storage_uri_resolver
-            .resolve(uri.as_ref())
+            .resolve(uri.as_str())
             .map_err(|err| match err {
                 StorageResolverError::InvalidUri { message } => {
                     MetastoreResolverError::InvalidUri(message)

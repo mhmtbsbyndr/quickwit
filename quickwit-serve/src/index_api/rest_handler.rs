@@ -123,6 +123,7 @@ mod tests {
     use quickwit_indexing::mock_split;
     use quickwit_metastore::{IndexMetadata, MockMetastore, SplitState};
     use quickwit_storage::StorageUriResolver;
+    use quickwit_common::uri::Uri;
 
     use super::*;
     use crate::recover_fn;

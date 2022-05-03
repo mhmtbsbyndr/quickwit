@@ -151,7 +151,7 @@ impl Uri {
                 .join(path)
                 .to_string_lossy()
                 .to_string(),
-            "s3" => format!(
+            "ram" | "s3" => format!(
                 "{}{}{}",
                 self.uri,
                 if self.uri.ends_with('/') { "" } else { "/" },
@@ -166,11 +166,11 @@ impl Uri {
     }
 }
 
-// impl AsRef<str> for Uri {
-//     fn as_ref(&self) -> &str {
-//         &self.uri
-//     }
-// }
+impl AsRef<str> for Uri {
+    fn as_ref(&self) -> &str {
+        &self.uri
+    }
+}
 
 impl Display for Uri {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
