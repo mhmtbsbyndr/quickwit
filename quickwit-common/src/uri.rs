@@ -23,6 +23,7 @@ use std::fmt::Display;
 use std::path::{Component, Path, PathBuf};
 
 use anyhow::{bail, Context};
+use serde::{Serialize, Serializer};
 
 /// Default file protocol `file://`
 const FILE_PROTOCOL: &str = "file";
@@ -118,7 +119,7 @@ impl Uri {
     /// Returns the file path of the URI.
     /// Applies only to `file://` URIs.
     pub fn filepath(&self) -> Option<&Path> {
-        if self.protocol() == "file" {
+        if self.protocol() == FILE_PROTOCOL {
             self.uri.strip_prefix("file://").map(Path::new)
         } else {
             None
@@ -151,6 +152,13 @@ impl PartialEq<&str> for Uri {
 impl PartialEq<String> for Uri {
     fn eq(&self, other: &String) -> bool {
         &self.uri == other
+    }
+}
+
+impl Serialize for Uri {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where S: Serializer {
+        serializer.serialize_str(&self.uri)
     }
 }
 
@@ -280,6 +288,15 @@ mod tests {
                 .extension()
                 .unwrap(),
             Extension::Unknown("foo".to_string())
+        );
+    }
+
+    #[test]
+    fn test_uri_serialize() {
+        let uri = Uri::try_new("s3://bucket/key").unwrap();
+        assert_eq!(
+            serde_json::to_value(&uri).unwrap(),
+            serde_json::Value::String("s3://bucket/key".to_string())
         );
     }
 }
