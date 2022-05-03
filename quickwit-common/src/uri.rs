@@ -57,23 +57,25 @@ pub struct Uri {
 }
 
 impl Uri {
-    /// Tries to to construct a Uri from the raw string.
+    /// Attempts to construct a [`Uri`] from a raw string slice.
     /// A `file://` protocol is assumed if not specified.
-    /// File URIs are resolved (normalised) relative to the current working directory
+    /// File URIs are resolved (normalized) relative to the current working directory
     /// unless an absolute path is specified.
-    /// Handles special characters like (~, ., ..)
+    /// Handles special characters like `~`, `.`, `..`.
     pub fn try_new(uri: &str) -> anyhow::Result<Self> {
+        if uri.is_empty() {
+            bail!("URI is empty.");
+        }
         let (protocol, mut path) = match uri.split_once(PROTOCOL_SEPARATOR) {
             None => (FILE_PROTOCOL, uri.to_string()),
             Some((protocol, path)) => (protocol, path.to_string()),
         };
-
         if protocol == FILE_PROTOCOL {
             if path.starts_with('~') {
                 // We only accept `~` (alias to the home directory) and `~/path/to/something`.
                 // If there is something following the `~` that is not `/`, we bail out.
                 if path.len() > 1 && !path.starts_with("~/") {
-                    bail!("This path syntax `{}` is not supported.", uri);
+                    bail!("Path syntax `{}` is not supported.", uri);
                 }
 
                 let home_dir_path = home::home_dir()
@@ -83,7 +85,6 @@ impl Uri {
 
                 path.replace_range(0..1, &home_dir_path);
             }
-
             if !path.starts_with('/') {
                 let current_dir = env::current_dir().context(
                     "Failed to resolve current working directory: dir does not exist or \
@@ -91,19 +92,17 @@ impl Uri {
                 )?;
                 path = current_dir.join(path).to_string_lossy().to_string();
             }
-
             path = normalize_path(Path::new(&path))
                 .to_string_lossy()
                 .to_string();
         }
-
         Ok(Self {
             uri: format!("{}{}{}", protocol, PROTOCOL_SEPARATOR, path),
             protocol_idx: protocol.len(),
         })
     }
 
-    /// Returns the URI extension.
+    /// Returns the extension of the URI.
     pub fn extension(&self) -> Option<Extension> {
         Path::new(&self.uri)
             .extension()
@@ -111,19 +110,30 @@ impl Uri {
             .and_then(Extension::maybe_new)
     }
 
-    /// Returns the uri protocol.
+    /// Returns the protocol of the URI.
     pub fn protocol(&self) -> &str {
         &self.uri[..self.protocol_idx]
     }
 
-    /// Returns the file path from the uri.
-    /// Useful only for `file://` protocol Uri.
+    /// Returns the file path of the URI.
+    /// Applies only to `file://` URIs.
     pub fn filepath(&self) -> Option<&Path> {
         if self.protocol() == "file" {
             self.uri.strip_prefix("file://").map(Path::new)
         } else {
             None
         }
+    }
+
+    /// Consumes the [`Uri`] struct and returns the normalized URI as a string.
+    pub fn into_string(self) -> String {
+        self.uri
+    }
+}
+
+impl AsRef<str> for Uri {
+    fn as_ref(&self) -> &str {
+        &self.uri
     }
 }
 
@@ -133,9 +143,14 @@ impl Display for Uri {
     }
 }
 
-impl AsRef<str> for Uri {
-    fn as_ref(&self) -> &str {
-        &self.uri
+impl PartialEq<&str> for Uri {
+    fn eq(&self, other: &&str) -> bool {
+        &self.uri == other
+    }
+}
+impl PartialEq<String> for Uri {
+    fn eq(&self, other: &String) -> bool {
+        &self.uri == other
     }
 }
 
@@ -177,83 +192,79 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_uri() -> anyhow::Result<()> {
+    fn test_try_new_uri() {
+        Uri::try_new("").unwrap_err();
+
         let home_dir = home::home_dir().unwrap();
         let current_dir = env::current_dir().unwrap();
 
-        let uri = Uri::try_new("file:///home/foo/bar")?;
+        let uri = Uri::try_new("file:///home/foo/bar").unwrap();
         assert_eq!(uri.protocol(), "file");
         assert_eq!(uri.filepath(), Some(Path::new("/home/foo/bar")));
         assert_eq!(uri.as_ref(), "file:///home/foo/bar");
+        assert_eq!(uri, "file:///home/foo/bar");
+        assert_eq!(uri, "file:///home/foo/bar".to_string());
 
         assert_eq!(
-            Uri::try_new("home/homer/docs/dognuts")?.to_string(),
+            Uri::try_new("home/homer/docs/dognuts").unwrap(),
             format!("file://{}/home/homer/docs/dognuts", current_dir.display())
         );
-
         assert_eq!(
-            Uri::try_new("home/homer/docs/../dognuts")?.to_string(),
+            Uri::try_new("home/homer/docs/../dognuts").unwrap(),
             format!("file://{}/home/homer/dognuts", current_dir.display())
         );
-
         assert_eq!(
-            Uri::try_new("home/homer/docs/../../dognuts")?.to_string(),
+            Uri::try_new("home/homer/docs/../../dognuts").unwrap(),
             format!("file://{}/home/dognuts", current_dir.display())
         );
-
         assert_eq!(
-            Uri::try_new("/home/homer/docs/dognuts")?.to_string(),
+            Uri::try_new("/home/homer/docs/dognuts").unwrap(),
             "file:///home/homer/docs/dognuts"
         );
-
         assert_eq!(
-            Uri::try_new("~")?.to_string(),
+            Uri::try_new("~").unwrap(),
             format!("file://{}", home_dir.display())
         );
         assert_eq!(
-            Uri::try_new("~/")?.to_string(),
+            Uri::try_new("~/").unwrap(),
             format!("file://{}", home_dir.display())
         );
-
         assert_eq!(
             Uri::try_new("~anything/bar").unwrap_err().to_string(),
-            "This path syntax `~anything/bar` is not supported."
+            "Path syntax `~anything/bar` is not supported."
         );
-
         assert_eq!(
-            Uri::try_new("~/.")?.to_string(),
+            Uri::try_new("~/.").unwrap(),
             format!("file://{}", home_dir.display())
         );
         assert_eq!(
-            Uri::try_new("~/..")?.to_string(),
+            Uri::try_new("~/..").unwrap(),
             format!("file://{}", home_dir.parent().unwrap().display())
         );
-
         assert_eq!(
-            Uri::try_new("file://")?.to_string(),
+            Uri::try_new("file://").unwrap(),
             format!("file://{}", current_dir.display())
         );
-
         assert_eq!(
-            Uri::try_new("file://.")?.to_string(),
+            Uri::try_new("file://.").unwrap(),
             format!("file://{}", current_dir.display())
         );
-
         assert_eq!(
-            Uri::try_new("file://..")?.to_string(),
+            Uri::try_new("file://..").unwrap(),
             format!("file://{}", current_dir.parent().unwrap().display())
         );
-
         assert_eq!(
-            Uri::try_new("s3://home/homer/docs/dognuts")?.to_string(),
+            Uri::try_new("s3://home/homer/docs/dognuts").unwrap(),
             "s3://home/homer/docs/dognuts"
         );
-
         assert_eq!(
-            Uri::try_new("s3://home/homer/docs/../dognuts")?.to_string(),
+            Uri::try_new("s3://home/homer/docs/../dognuts").unwrap(),
             "s3://home/homer/docs/../dognuts"
         );
+    }
 
+    #[test]
+    fn test_uri_extension() {
         assert!(Uri::try_new("s3://").unwrap().extension().is_none());
 
         assert_eq!(
@@ -263,7 +274,6 @@ mod tests {
                 .unwrap(),
             Extension::Json
         );
-
         assert_eq!(
             Uri::try_new("s3://config.foo")
                 .unwrap()
@@ -271,7 +281,5 @@ mod tests {
                 .unwrap(),
             Extension::Unknown("foo".to_string())
         );
-
-        Ok(())
     }
 }
